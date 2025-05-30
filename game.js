@@ -10,6 +10,11 @@ canvas.width = CANVAS_WIDTH;
 canvas.height = CANVAS_HEIGHT;
 ctx.imageSmoothingEnabled = false;
 
+// --- Core game item arrays & constants ---
+const planktonItems = [];
+const enemies = [];
+const PLANKTON_SIZE = 10;
+
 // Zone Definitions
 const zones = [
     {
@@ -47,7 +52,7 @@ function playerTakeDamage(amount) {
     if (player.health <= 0) {
         player.health = 0;
         gameOver = true;
-        zoneCleared = false; // Ensure zoneCleared is false on game over
+        zoneCleared = false; 
         console.log("Player health reached 0. Game Over.");
     } else {
         player.invulnerableTimer = player.invulnerabilityDuration;
@@ -59,7 +64,7 @@ function drawPlayerHealth() {
     const startX = CANVAS_WIDTH - (player.maxHealth * (heartSize + heartPadding)) + heartPadding - 10;
     for (let i = 0; i < player.maxHealth; i++) {
         let heartColor = (i < player.health) ? 'red' : 'lightgray';
-        if (player.invulnerableTimer > 0 && (player.invulnerableTimer % 30 < 15) ) { // Flash rate adjustment
+        if (player.invulnerableTimer > 0 && (player.invulnerableTimer % 30 < 15) ) { // Adjusted flash rate
              if (i < player.health) heartColor = 'pink';
         }
         ctx.fillStyle = heartColor;
@@ -79,13 +84,25 @@ document.addEventListener('keyup', function(e) {
     else if (keysPressed.hasOwnProperty(e.key)) { keysPressed[e.key] = false; }
 });
 
-const enemies = [];
 const ENEMY_TYPES = {
-    chasingFish: { width:21,height:15,color:'teal',speed:1.5,damage:1,health:1,sprite:[{x:0,y:1,w:6,h:3,c:'teal'},{x:6,y:0,w:1,h:5,c:'darkcyan'},{x:1,y:0,w:1,h:1,c:'white'},{x:1.25,y:0.25,w:0.5,h:0.5,c:'black'}],pixelSize:3}
+    chasingFish: { 
+        baseWidth:7, // Base dimension in "enemy pixels" before scaling by pixelSize
+        baseHeight:5, 
+        color:'teal',
+        speed:1.5,
+        damage:1,
+        health:1,
+        sprite:[
+            {x:0,y:1,w:6,h:3,c:'teal'}, // Body
+            {x:6,y:0,w:1,h:5,c:'darkcyan'}, // Tail
+            {x:1,y:0,w:1,h:1,c:'white'}, // Eye white
+            {x:1.25,y:0.25,w:0.5,h:0.5,c:'black'} // Pupil (0.5 means half an enemy pixelSize unit)
+        ],
+        pixelSize:3
+    }
 };
-// Recalculate width/height based on sprite and pixelSize for ChasingFish
-ENEMY_TYPES.chasingFish.width = 7 * ENEMY_TYPES.chasingFish.pixelSize;
-ENEMY_TYPES.chasingFish.height = 5 * ENEMY_TYPES.chasingFish.pixelSize;
+ENEMY_TYPES.chasingFish.width = ENEMY_TYPES.chasingFish.baseWidth * ENEMY_TYPES.chasingFish.pixelSize;
+ENEMY_TYPES.chasingFish.height = ENEMY_TYPES.chasingFish.baseHeight * ENEMY_TYPES.chasingFish.pixelSize;
 
 
 function spawnEnemy(enemyConfig) {
@@ -93,18 +110,23 @@ function spawnEnemy(enemyConfig) {
     const enemy = { ...template, type: enemyConfig.type, x: Math.random()*(CANVAS_WIDTH-template.width), y: Math.random()*(CANVAS_HEIGHT-template.height-40)+20, dx: template.speed*(Math.random()<0.5?1:-1), currentHealth: template.health };
     enemies.push(enemy);
 }
+
 function drawEnemies() {
     enemies.forEach(enemy => {
         const pSize = enemy.pixelSize;
         enemy.sprite.forEach(block => {
-            ctx.fillStyle = block.c; let drawX = enemy.x + block.x * pSize;
-            if (enemy.dx < 0) { drawX = enemy.x + (enemy.width - (block.x + block.w) * pSize); }
+            ctx.fillStyle = block.c; 
+            let drawX = enemy.x + block.x * pSize;
+            if (enemy.dx < 0) { // Flip sprite if moving left
+                drawX = enemy.x + (enemy.baseWidth * pSize) - ((block.x + block.w) * pSize);
+            }
             ctx.fillRect(drawX, enemy.y + block.y * pSize, block.w * pSize, block.h * pSize);
         });
     });
 }
+
 function updateEnemies() {
-    if (gameOver) return; // Stop enemy updates if game is over
+    if (gameOver) return;
 
     for (let i = enemies.length - 1; i >= 0; i--) {
         const enemy = enemies[i];
@@ -112,13 +134,12 @@ function updateEnemies() {
         if (enemy.x <= 0 || enemy.x + enemy.width >= CANVAS_WIDTH) {
             enemy.dx *= -1; enemy.x = Math.max(0, Math.min(enemy.x, CANVAS_WIDTH - enemy.width));
         }
-        // Chase logic
         const verticalAlignThreshold = 50;
-        const typeSpeed = ENEMY_TYPES[enemy.type].speed; // Get base speed for this enemy type
+        const typeSpeed = ENEMY_TYPES[enemy.type].speed;
         if (Math.abs(player.y + player.height/2 - (enemy.y + enemy.height/2)) < verticalAlignThreshold) {
-            if (player.x < enemy.x) enemy.dx = -typeSpeed; // Player is to the left
-            else enemy.dx = typeSpeed; // Player is to the right
-        } else { // Revert to patrol speed if player not in chase alignment
+            if (player.x < enemy.x) enemy.dx = -typeSpeed; 
+            else enemy.dx = typeSpeed; 
+        } else { 
             enemy.dx = Math.sign(enemy.dx) * typeSpeed;
         }
 
@@ -146,15 +167,25 @@ function drawZoneStaticElements() {
     const zone = getCurrentZone(); if(!zone.staticElements) return;
     zone.staticElements.forEach(element => { ctx.fillStyle = element.color; ctx.fillRect(element.x, element.y, element.width, element.height); });
 }
+
 function spawnPlankton() {
-    const zone = getCurrentZone(); const plankton = { x:Math.random()*(CANVAS_WIDTH-PLANKTON_SIZE),y:Math.random()*(CANVAS_HEIGHT-PLANKTON_SIZE),width:PLANKTON_SIZE,height:PLANKTON_SIZE,color:zone.planktonColor}; planktonItems.push(plankton);
+    const zone = getCurrentZone(); 
+    const plankton = { 
+        x:Math.random()*(CANVAS_WIDTH-PLANKTON_SIZE),
+        y:Math.random()*(CANVAS_HEIGHT-PLANKTON_SIZE),
+        width:PLANKTON_SIZE,
+        height:PLANKTON_SIZE,
+        color:zone.planktonColor
+    }; 
+    planktonItems.push(plankton);
 }
+
 function initEntitiesForZone() {
     planktonItems.length = 0;
     enemies.length = 0;
     const zone = getCurrentZone();
     for (let i = 0; i < zone.initialPlanktonCount; i++) { spawnPlankton(); }
-    if (zone.enemyTypes) { // Check if enemyTypes is defined
+    if (zone.enemyTypes) {
         zone.enemyTypes.forEach(enemyConfig => {
             for (let i = 0; i < enemyConfig.count; i++) { spawnEnemy(enemyConfig); }
         });
@@ -173,7 +204,8 @@ function updateCollectibles() {
 }
 function drawScore() { ctx.fillStyle = 'black'; ctx.font = '20px Arial'; ctx.fillText('Score: '+score,10,25); ctx.fillText(`Zone: ${getCurrentZone().name}`,10,50); }
 function drawPlayer() {
-    const pSize = player.pixelSize; const shrimpPixelBlocks = [[2,1,4,3,player.color1],[1,2,1,2,player.color1],[6,2,1,2,player.color1],[3,4,2,1,player.color2],[2,5,1,1,player.color2],[5,5,1,1,player.color2],[3,0,1,1,'white'],[4,0,1,1,'black'],[5,0,1,1,'white'],[6,0,1,1,'black']];
+    const pSize = player.pixelSize; 
+    const shrimpPixelBlocks = [[2,1,4,3,player.color1],[1,2,1,2,player.color1],[6,2,1,2,player.color1],[3,4,2,1,player.color2],[2,5,1,1,player.color2],[5,5,1,1,player.color2],[3,0,1,1,'white'],[4,0,1,1,'black'],[5,0,1,1,'white'],[6,0,1,1,'black']];
     shrimpPixelBlocks.forEach(block => {
         let actualColor;
         if (block[4] === player.color1) actualColor = player.color1;
@@ -186,14 +218,12 @@ function drawPlayer() {
 function updatePlayer() {
     if (gameOver) { 
         if (keysPressed.Enter) startGameAndRunLoop(); 
-        return; // Only process Enter for restart if game is over
+        return;
     }
     updatePlayerInvulnerability();
     if (keysPressed.KeyH) { playerTakeDamage(1); keysPressed.KeyH = false; }
     
     let previousX = player.x; player.dx = 0; player.dy = 0;
-    // Allow movement if zone is cleared (for transition) or if not cleared
-    // Simplified movement logic: always allow movement if not game over. Transitions handle edge cases.
     if (keysPressed.ArrowLeft) player.dx = -player.speed;
     if (keysPressed.ArrowRight) player.dx = player.speed;
     if (keysPressed.ArrowUp) player.dy = -player.speed;
@@ -202,32 +232,37 @@ function updatePlayer() {
     player.x += player.dx; player.y += player.dy;
     if (player.y < 0) player.y = 0; if (player.y + player.height > CANVAS_HEIGHT) player.y = CANVAS_HEIGHT - player.height;
 
-    if (zoneCleared) { // Handle transitions if zone is cleared
+    if (zoneCleared) {
         if (player.x + player.width > CANVAS_WIDTH && previousX + player.width <= CANVAS_WIDTH) { currentZoneIndex = (currentZoneIndex + 1) % zones.length; player.x = 5; initEntitiesForZone(); }
         else if (player.x < 0 && previousX >= 0) { currentZoneIndex = (currentZoneIndex - 1 + zones.length) % zones.length; player.x = CANVAS_WIDTH - player.width - 5; initEntitiesForZone(); }
-        else { // Boundary if zone cleared but not at edge
+        else { 
             if (player.x < 0) player.x = 0; if (player.x + player.width > CANVAS_WIDTH) player.x = CANVAS_WIDTH - player.width;
         }
-    } else { // Normal boundary collision if zone not cleared
+    } else { 
         if (player.x < 0) player.x = 0; if (player.x + player.width > CANVAS_WIDTH) player.x = CANVAS_WIDTH - player.width;
     }
-    // Removed Enter key consumption for zoneCleared message, as Enter is now primarily for game restart.
 }
 function drawGameMessages() {
-    if (zoneCleared && !gameOver) { ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(0,CANVAS_HEIGHT/3,CANVAS_WIDTH,CANVAS_HEIGHT/3); ctx.font='bold 30px Arial';ctx.fillStyle='white';ctx.textAlign='center'; ctx.fillText(`${getCurrentZone().name} Cleared!`,CANVAS_WIDTH/2,CANVAS_HEIGHT/2-10); ctx.font='20px Arial';ctx.fillText('Move to edge for next zone.',CANVAS_WIDTH/2,CANVAS_HEIGHT/2+30); ctx.textAlign='left'; }
-    else if (gameOver) { ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(0,CANVAS_HEIGHT/3,CANVAS_WIDTH,CANVAS_HEIGHT/3); ctx.font='bold 40px Arial';ctx.fillStyle='red';ctx.textAlign='center'; ctx.fillText('GAME OVER',CANVAS_WIDTH/2,CANVAS_HEIGHT/2-10); ctx.font='20px Arial';ctx.fillText('Press Enter to Restart',CANVAS_WIDTH/2,CANVAS_HEIGHT/2+30); ctx.textAlign='left'; }
+    if (zoneCleared && !gameOver) { ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(0,CANVAS_HEIGHT/3,CANVAS_WIDTH,CANVAS_HEIGHT/3); ctx.font='bold 30px Arial';ctx.fillStyle='white';ctx.textAlign='center'; ctx.fillText(`${getCurrentZone().name} Cleared!`,CANVAS_WIDTH/2, CANVAS_HEIGHT/2-10); ctx.font='20px Arial';ctx.fillText('Move to edge for next zone.',CANVAS_WIDTH/2, CANVAS_HEIGHT/2+30); ctx.textAlign='left'; }
+    else if (gameOver) { ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(0,CANVAS_HEIGHT/3,CANVAS_WIDTH,CANVAS_HEIGHT/3); ctx.font='bold 40px Arial';ctx.fillStyle='red';ctx.textAlign='center'; ctx.fillText('GAME OVER',CANVAS_WIDTH/2, CANVAS_HEIGHT/2-10); ctx.font='20px Arial';ctx.fillText('Press Enter to Restart',CANVAS_WIDTH/2, CANVAS_HEIGHT/2+30); ctx.textAlign='left'; }
 }
 function clearCanvas() { const zone = getCurrentZone(); ctx.fillStyle = zone.backgroundColor; ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); }
 
+// Global game state variables
+let score = 0;
+let gameOver = false;
+let zoneCleared = false;
 let gameLoopId = null;
+
+
 function mainGameLoop() {
     clearCanvas();
     updateParallaxBackgrounds(); drawParallaxBackgrounds();
     drawZoneStaticElements();
 
     if (gameOver) {
-        updatePlayer(); // Only for restart logic and H key test (if not game over yet)
-    } else { // Gameplay active (zoneCleared or normal play)
+        updatePlayer(); 
+    } else { 
         updatePlayer();
         updateEnemies(); 
         if (!zoneCleared) {
@@ -255,20 +290,16 @@ function startGameAndRunLoop() {
     
     for (let key in keysPressed) { keysPressed[key] = false; }
     
-    if (!gameLoopId) {
+    if (!gameLoopId) { 
         zones.forEach(zone => {
             if (zone.parallaxLayers) { zone.parallaxLayers.forEach(layer => layer.x = 0); }
         });
-    }
-    
-    initEntitiesForZone();
-    
-    if (!gameLoopId) {
         console.log("Starting main game loop for the first time.");
         mainGameLoop();
-    } else {
-        console.log("Game state reset. Loop is already running.");
     }
+    
+    initEntitiesForZone(); 
+    console.log("Game state reset. Loop is already running for restarts, or just started for initial load.");
 }
 
 startGameAndRunLoop();
